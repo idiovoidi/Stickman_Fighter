@@ -13,21 +13,54 @@
             align-items: center;
             min-height: 100vh;
             background: #1a1a1a;
+            font-family: Arial, sans-serif;
         }
         canvas {
-            background: #fff;
-            border: 2px solid #333;
+            background: transparent;
+        }
+        #game-target {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100vh;
+            z-index: 1;
         }
         #controls {
             position: fixed;
             top: 20px;
             left: 20px;
             color: white;
-            font-family: Arial, sans-serif;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            z-index: 2;
+        }
+        #debug-controls {
+            margin-top: 20px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 5px;
+        }
+        #debug-options {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        #debug-options label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
     </style>
 </head>
 <body>
+    <!-- Add this div before the controls -->
+    <div id="game-target"></div>
+
     <div id="controls">
         <h3>AI Stick Fighter</h3>
         <p>Controls:</p>
@@ -35,14 +68,50 @@
             <li>R - Reset positions</li>
             <li>P - Pause/Resume</li>
         </ul>
+        <div id="debug-controls">
+            <h4>Debug Controls:</h4>
+            <ul>
+                <li>D - Toggle Debug View</li>
+            </ul>
+            <div id="debug-options" style="display: none;">
+                <label>
+                    <input type="checkbox" data-debug="showBodies" checked> Show Bodies
+                </label>
+                <label>
+                    <input type="checkbox" data-debug="showJoints" checked> Show Joints
+                </label>
+                <label>
+                    <input type="checkbox" data-debug="showVelocities" checked> Show Velocities
+                </label>
+                <label>
+                    <input type="checkbox" data-debug="showBoundingBoxes" checked> Show Bounding Boxes
+                </label>
+                <label>
+                    <input type="checkbox" data-debug="showAngles" checked> Show Angles
+                </label>
+            </div>
+        </div>
     </div>
 
+    <!-- Load Matter.js before modules -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
-    <script src="js/GameWorld.js"></script>
-    <script src="js/GameEngine.js"></script>
-    <script src="js/InputManager.js"></script>
-    <script src="js/StickMan.js"></script>
-    <script src="js/AIController.js"></script>
-    <script src="js/game.js"></script>
+    
+    <!-- Load the game with type="module" -->
+    <script type="module" src="js/game.js"></script>
+
+    <script>
+        // Add debug controls functionality
+        document.addEventListener('DOMContentLoaded', () => {
+            const debugOptions = document.getElementById('debug-options');
+            const checkboxes = debugOptions.querySelectorAll('input[type="checkbox"]');
+            
+            checkboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', (e) => {
+                    const option = e.target.dataset.debug;
+                    window.game.physicsDebugger.debugOptions[option] = e.target.checked;
+                });
+            });
+        });
+    </script>
 </body>
 </html> 

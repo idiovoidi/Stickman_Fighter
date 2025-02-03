@@ -1,81 +1,98 @@
+import { GameEngine } from './GameEngine.js';
+import { InputManager } from './InputManager.js';
+import { StickMan } from './StickMan.js';
+import { AIController } from './AIController.js';
+import { PersonalityTraits } from './ai/PersonalityTraits.js';
+
 // Initialize Matter.js
 const Engine = Matter.Engine;
 const Render = Matter.Render;
 const World = Matter.World;
 const Bodies = Matter.Bodies;
 
-// Create engine
-const engine = Engine.create();
-window.engine = engine;
-
-// Create renderer
-const render = Render.create({
-    element: document.body,
-    engine: engine,
-    options: {
-        width: 800,
-        height: 600,
-        wireframes: false,
-        background: '#f0f0f0'
-    }
-});
-
-// Create ground
-const ground = Bodies.rectangle(400, 580, 810, 40, {
-    isStatic: true,
-    render: {
-        fillStyle: '#666'
-    }
-});
-
-// Add ground to world
-World.add(engine.world, ground);
-
-// Create fighters
-const leftFighter = new StickMan(200, 300, true);
-const rightFighter = new StickMan(600, 300, false);
-
-// Create AI controllers
-const leftAI = new AIController(leftFighter, rightFighter);
-const rightAI = new AIController(rightFighter, leftFighter);
-
-// Game loop
-function gameLoop() {
-    leftAI.update();
-    rightAI.update();
-    requestAnimationFrame(gameLoop);
-}
-
-// Start the game loop
-gameLoop();
-
-// Run the engine
-Engine.run(engine);
-Render.run(render);
-
-// Optional: Add manual controls for testing
-document.addEventListener('keydown', (event) => {
-    switch(event.key) {
-        case 'r': // Reset positions
-            leftFighter.reset();
-            rightFighter.reset();
-            break;
-    }
-});
-
 class Game {
     constructor() {
-        this.gameEngine = new GameEngine();
-        this.inputManager = new InputManager(this.gameEngine);
+        this.engine = Engine.create();
+        window.engine = this.engine; // For compatibility
+        
+        this.setupRenderer();
+        this.setupWorld();
+        this.setupFighters();
+        this.setupGameLoop();
     }
 
-    start() {
-        this.gameEngine.initialize();
+    setupRenderer() {
+        this.render = Render.create({
+            element: document.body,
+            engine: this.engine,
+            options: {
+                width: 800,
+                height: 600,
+                wireframes: false,
+                background: '#f0f0f0'
+            }
+        });
+    }
+
+    setupWorld() {
+        // Create ground
+        const ground = Bodies.rectangle(400, 580, 810, 40, {
+            isStatic: true,
+            render: {
+                fillStyle: '#666'
+            }
+        });
+
+        // Add ground to world
+        World.add(this.engine.world, ground);
+    }
+
+    setupFighters() {
+        // Create fighters
+        this.leftFighter = new StickMan(200, 300, true);
+        this.rightFighter = new StickMan(600, 300, false);
+
+        // Create AI controllers with different personalities
+        this.leftAI = new AIController(
+            this.leftFighter, 
+            this.rightFighter, 
+            PersonalityTraits.AGGRESSIVE
+        );
+        this.rightAI = new AIController(
+            this.rightFighter, 
+            this.leftFighter, 
+            PersonalityTraits.DEFENSIVE
+        );
+    }
+
+    setupGameLoop() {
+        // Run the engine
+        Engine.run(this.engine);
+        Render.run(this.render);
+
+        // Game loop
+        const gameLoop = () => {
+            if (!this.gameState?.isPaused) {
+                this.leftAI.update();
+                this.rightAI.update();
+            }
+            requestAnimationFrame(gameLoop);
+        };
+
+        gameLoop();
+    }
+
+    reset() {
+        if (this.leftFighter) this.leftFighter.reset();
+        if (this.rightFighter) this.rightFighter.reset();
     }
 }
 
-// Start the game when the page loads
-window.addEventListener('load', () => {
-    const game = new Game();
-    game.start();
+// Initialize game when DOM is fully loaded
+document.addEventListener('DOMContentLoaded', () => {
+    const game = new GameEngine();
+    window.game = game; // Make game accessible for debug controls
+    
+    // Initialize the game world and start the game loop
+    game.initialize();
 }); 

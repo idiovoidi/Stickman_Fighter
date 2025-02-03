@@ -1,56 +1,62 @@
-class AIController {
-    constructor(stickman, opponent) {
+import { AIStates, IdleState, ApproachingState, AttackingState, DefendingState, RetreatingState } from './ai/AIStates.js';
+import { PersonalityTraits, PersonalityProfile } from './ai/PersonalityTraits.js';
+
+export class AIController {
+    constructor(stickman, opponent, personalityType = PersonalityTraits.BALANCED) {
         this.stickman = stickman;
         this.opponent = opponent;
-        this.decisionInterval = 500; // Make decisions every 500ms
-        this.lastDecision = 0;
-        this.state = {
-            distanceToOpponent: 0,
-            heightDifference: 0,
-            isAttacking: false
-        };
+        this.currentState = null;
+        this.states = new Map();
+        this.lastStateChange = 0;
+        this.stateChangeDelay = 200; // Minimum time between state changes
+        this.personality = new PersonalityProfile(personalityType);
+
+        this.setupStates();
+        this.changeState(AIStates.IDLE);
     }
 
-    update() {
-        // Update state
+    setupStates() {
+        this.states.set(AIStates.IDLE, new IdleState(this));
+        this.states.set(AIStates.APPROACHING, new ApproachingState(this));
+        this.states.set(AIStates.ATTACKING, new AttackingState(this));
+        this.states.set(AIStates.DEFENDING, new DefendingState(this));
+        this.states.set(AIStates.RETREATING, new RetreatingState(this));
+    }
+
+    update(deltaTime) {
+        if (!this.currentState) return;
+        
+        this.currentState.execute(deltaTime);
+    }
+
+    changeState(newStateName) {
+        const now = performance.now();
+        if (now - this.lastStateChange < this.stateChangeDelay) return;
+
+        const newState = this.states.get(newStateName);
+        if (!newState) return;
+
+        if (this.currentState) {
+            this.currentState.exit();
+        }
+
+        this.currentState = newState;
+        this.lastStateChange = now;
+        this.currentState.enter();
+    }
+
+    getState() {
         const myPosition = this.stickman.parts.torso.position;
         const opponentPosition = this.opponent.parts.torso.position;
         
-        this.state.distanceToOpponent = Matter.Vector.magnitude(
-            Matter.Vector.sub(myPosition, opponentPosition)
-        );
-        this.state.heightDifference = myPosition.y - opponentPosition.y;
-
-        // Make decisions periodically
-        if (Date.now() - this.lastDecision > this.decisionInterval) {
-            this.makeDecision();
-            this.lastDecision = Date.now();
-        }
-    }
-
-    makeDecision() {
-        if (this.stickman.isAttacking) return;
-
-        // If too far, move closer
-        if (this.state.distanceToOpponent > 150) {
-            this.stickman.moves.jump();
-            return;
-        }
-
-        // If in range, attack
-        if (this.state.distanceToOpponent < 100) {
-            // Randomly choose between punch and kick
-            if (Math.random() < 0.5) {
-                this.stickman.moves.punch();
-            } else {
-                this.stickman.moves.kick();
-            }
-            return;
-        }
-
-        // Dodge if opponent is attacking
-        if (this.opponent.isAttacking && Math.random() < 0.7) {
-            this.stickman.moves.jump();
-        }
+        return {
+            distanceToOpponent: Matter.Vector.magnitude(
+                Matter.Vector.sub(myPosition, opponentPosition)
+            ),
+            heightDifference: myPosition.y - opponentPosition.y,
+            opponentIsAttacking: this.opponent.isAttacking,
+            isAttacking: this.stickman.isAttacking,
+            personality: this.personality
+        };
     }
 } 

@@ -1,4 +1,17 @@
-class StickMan {
+import { AnimationController } from './animation/AnimationController.js';
+import { Tween } from './animation/Tween.js';
+
+/**
+ * @class StickMan
+ * @description Represents a stick figure fighter with physics-based movement and animations
+ */
+export class StickMan {
+    /**
+     * @constructor
+     * @param {number} x - Initial x position
+     * @param {number} y - Initial y position
+     * @param {boolean} isLeftSide - Whether the fighter starts on the left side
+     */
     constructor(x, y, isLeftSide = true) {
         this.engine = window.engine;
         this.isLeftSide = isLeftSide;
@@ -6,12 +19,22 @@ class StickMan {
         this.joints = [];
         this.moves = [];
         this.isAttacking = false;
+        this.isStunned = false;
         
         // Create stick man parts
         this.createBody(x, y);
         this.setupMoves();
+        this.animations = new AnimationController();
+        this.setupAnimations();
     }
 
+    /**
+     * @method createBody
+     * @description Creates the physics bodies and joints for the stick figure
+     * @param {number} x - X position to create the body
+     * @param {number} y - Y position to create the body
+     * @private
+     */
     createBody(x, y) {
         const options = {
             friction: 0.5,
@@ -82,44 +105,114 @@ class StickMan {
     setupMoves() {
         this.moves = {
             punch: () => {
-                if (this.isAttacking) return;
+                if (this.isAttacking || this.isStunned) return;
                 this.isAttacking = true;
                 
-                const arm = this.isLeftSide ? this.parts.rightArm : this.parts.leftArm;
-                const force = this.isLeftSide ? 0.05 : -0.05;
-                
-                Matter.Body.setAngularVelocity(arm, force);
-                Matter.Body.setVelocity(arm, { x: this.isLeftSide ? 10 : -10, y: -2 });
-                
-                setTimeout(() => {
-                    this.isAttacking = false;
-                }, 500);
+                this.animations.playAnimation('punch', {
+                    onComplete: () => {
+                        this.isAttacking = false;
+                        // Reset arm position
+                        const arm = this.isLeftSide ? this.parts.rightArm : this.parts.leftArm;
+                        Matter.Body.setAngle(arm, 0);
+                    }
+                });
             },
             
             kick: () => {
-                if (this.isAttacking) return;
+                if (this.isAttacking || this.isStunned) return;
                 this.isAttacking = true;
                 
-                const leg = this.isLeftSide ? this.parts.rightLeg : this.parts.leftLeg;
-                const force = this.isLeftSide ? 0.1 : -0.1;
-                
-                Matter.Body.setAngularVelocity(leg, force);
-                Matter.Body.setVelocity(leg, { x: this.isLeftSide ? 15 : -15, y: 0 });
-                
-                setTimeout(() => {
-                    this.isAttacking = false;
-                }, 700);
+                this.animations.playAnimation('kick', {
+                    onComplete: () => {
+                        this.isAttacking = false;
+                        // Reset leg position
+                        const leg = this.isLeftSide ? this.parts.rightLeg : this.parts.leftLeg;
+                        Matter.Body.setAngle(leg, 0);
+                    }
+                });
             },
             
             jump: () => {
-                Matter.Body.setVelocity(this.parts.torso, { x: 0, y: -10 });
+                if (this.isStunned) return;
+                this.animations.playAnimation('jump');
             }
         };
     }
 
+    setupAnimations() {
+        // Punch animation
+        this.animations.createAnimation('punch', {
+            duration: 500,
+            easing: Tween.Easing.easeOutCubic,
+            onUpdate: (value) => {
+                const arm = this.isLeftSide ? this.parts.rightArm : this.parts.leftArm;
+                const angle = this.isLeftSide ? value * Math.PI/2 : -value * Math.PI/2;
+                Matter.Body.setAngle(arm, angle);
+            }
+        });
+
+        // Kick animation
+        this.animations.createAnimation('kick', {
+            duration: 700,
+            easing: Tween.Easing.easeOutElastic,
+            onUpdate: (value) => {
+                const leg = this.isLeftSide ? this.parts.rightLeg : this.parts.leftLeg;
+                const angle = this.isLeftSide ? value * Math.PI/2 : -value * Math.PI/2;
+                Matter.Body.setAngle(leg, angle);
+            }
+        });
+
+        // Jump animation
+        this.animations.createAnimation('jump', {
+            duration: 1000,
+            easing: Tween.Easing.easeOutQuad,
+            onUpdate: (value) => {
+                const force = -10 * (1 - value);
+                Matter.Body.setVelocity(this.parts.torso, { 
+                    x: this.parts.torso.velocity.x,
+                    y: force
+                });
+            }
+        });
+
+        // Stun animation
+        this.animations.createAnimation('stun', {
+            duration: 500,
+            easing: Tween.Easing.easeInOutQuad,
+            onUpdate: (value) => {
+                Object.values(this.parts).forEach(part => {
+                    const originalColor = this.isLeftSide ? '#ff4444' : '#44ff44';
+                    part.render.fillStyle = value < 0.5 ? '#ff0000' : originalColor;
+                });
+            }
+        });
+    }
+
+    /**
+     * @method stun
+     * @description Applies a stun effect to the fighter
+     * @param {number} duration - Duration of the stun in milliseconds
+     * @public
+     */
+    stun(duration) {
+        if (this.isStunned) return;
+        
+        this.isStunned = true;
+        this.animations.playAnimation('stun', {
+            duration: duration,
+            onComplete: () => {
+                this.isStunned = false;
+            }
+        });
+    }
+
     reset() {
+        this.animations.stopAll();
+        this.isAttacking = false;
+        this.isStunned = false;
         Object.values(this.parts).forEach(part => {
             Matter.Body.setVelocity(part, { x: 0, y: 0 });
+            Matter.Body.setAngle(part, 0);
             Matter.Body.setAngularVelocity(part, 0);
         });
     }
