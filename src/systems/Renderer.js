@@ -34,6 +34,8 @@ export class Renderer {
 
         this.setupCanvas();
         this.setupContext();
+        // Update canvas size again after context is ready
+        this.updateCanvasSize();
         this.setupLayers();
         this.setupEffects();
         this.setupEventListeners();
@@ -71,8 +73,7 @@ export class Renderer {
         this.context = this.canvas.getContext('2d');
         this.context.imageSmoothingEnabled = this.config.enableSmoothing;
 
-        // Set up high DPI rendering
-        this.context.scale(this.devicePixelRatio, this.devicePixelRatio);
+        // Context scaling is now handled in updateCanvasSize()
     }
 
     setupLayers() {
@@ -129,8 +130,10 @@ export class Renderer {
         this.canvas.width = rect.width * this.devicePixelRatio;
         this.canvas.height = rect.height * this.devicePixelRatio;
 
-        // Update context scale
-        this.context.scale(this.devicePixelRatio, this.devicePixelRatio);
+        // Update context scale only if context exists
+        if (this.context) {
+            this.context.scale(this.devicePixelRatio, this.devicePixelRatio);
+        }
     }
 
     handleResize() {
@@ -220,7 +223,7 @@ export class Renderer {
         for (let i = 0; i < 50; i++) {
             const x = (i * 137.5) % this.canvas.width;
             const y = (Math.sin(time + i) * 50 + this.canvas.height / 2) % this.canvas.height;
-            const size = Math.sin(time * 2 + i) * 2 + 1;
+            const size = Math.abs(Math.sin(time * 2 + i) * 2 + 1); // Ensure positive radius
 
             this.context.beginPath();
             this.context.arc(x, y, size, 0, Math.PI * 2);

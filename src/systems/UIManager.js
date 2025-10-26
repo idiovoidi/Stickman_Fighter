@@ -329,7 +329,7 @@ export class UIManager {
 
     // Update methods
     update(deltaTime) {
-        if (!this.isInitialized) return;
+        if (!this.isInitialized || !this.gameEngine) return;
 
         this.updateHealthBars();
         this.updateDebugPanel();

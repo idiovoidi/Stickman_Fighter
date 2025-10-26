@@ -3,6 +3,8 @@
  * Handles physics, animation, and combat mechanics
  */
 
+import Matter from 'matter-js';
+
 export class Fighter {
     constructor(x, y, options = {}) {
         this.position = { x, y };
@@ -338,7 +340,7 @@ export class Fighter {
         this.currentAnimation = 'idle';
     }
 
-    takeDamage(damage) {
+    takeDamage(damage, attacker = null) {
         if (this.isBlocking) {
             damage *= 0.3; // Reduce damage while blocking
         }
@@ -358,7 +360,23 @@ export class Fighter {
         // Flash effect
         this.flashEffect();
 
+        // Apply knockback if attacker is provided
+        if (attacker) {
+            this.applyKnockback(attacker, damage);
+        }
+
         return this.health <= 0; // Return true if fighter is defeated
+    }
+
+    applyKnockback(attacker, damage) {
+        const direction = this.options.isPlayer1 ?
+            { x: 1, y: 0 } : { x: -1, y: 0 };
+
+        const knockbackForce = damage * 0.01;
+        Matter.Body.applyForce(this.bodyParts.torso, this.bodyParts.torso.position, {
+            x: direction.x * knockbackForce,
+            y: direction.y * knockbackForce * 0.5
+        });
     }
 
     flashEffect() {
@@ -419,168 +437,45 @@ export class Fighter {
         }
     }
 
-stopMoving() {
-    // Gradually slow down instead of stopping immediately
-    const currentVelocity = this.bodyParts.torso.velocity;
-    Matter.Body.setVelocity(this.bodyParts.torso, {
-        x: currentVelocity.x * 0.8,
-        y: currentVelocity.y
-    });
-}
-
-// Combat methods
-executeMove(moveType) {
-    switch (moveType) {
-        case 'punch':
-            return this.executePunch();
-        case 'kick':
-            return this.executeKick();
-        case 'jump':
-            return this.executeJump();
-        case 'block':
-            return this.executeBlock();
-        default:
-            return false;
-    }
-}
-
-// Enhanced damage method
-takeDamage(damage, attacker = null) {
-    if (this.isBlocking) {
-        damage *= 0.3; // Reduce damage while blocking
-    }
-
-    this.health -= damage;
-    this.health = Math.max(0, this.health);
-
-    if (this.health > 0) {
-        this.currentAnimation = 'hurt';
-        setTimeout(() => {
-            if (this.currentAnimation === 'hurt') {
-                this.currentAnimation = 'idle';
-            }
-        }, 300);
-    }
-
-    // Flash effect
-    this.flashEffect();
-
-    // Apply knockback if attacker is provided
-    if (attacker) {
-        this.applyKnockback(attacker, damage);
-    }
-
-    return this.health <= 0; // Return true if fighter is defeated
-}
-
-applyKnockback(attacker, damage) {
-    const direction = this.options.isPlayer1 ?
-        { x: 1, y: 0 } : { x: -1, y: 0 };
-
-    const knockbackForce = damage * 0.01;
-    Matter.Body.applyForce(this.bodyParts.torso, this.bodyParts.torso.position, {
-        x: direction.x * knockbackForce,
-        y: direction.y * knockbackForce * 0.5
-    });
-}
-
-flashEffect() {
-    const originalColor = this.options.color;
-    Object.values(this.bodyParts).forEach(part => {
-        part.render.fillStyle = '#ffffff';
-    });
-
-    setTimeout(() => {
-        Object.values(this.bodyParts).forEach(part => {
-            part.render.fillStyle = originalColor;
-        });
-    }, 100);
-}
-
-reset() {
-    // Reset position
-    Matter.Body.setPosition(this.bodyParts.torso, this.position);
-    Matter.Body.setVelocity(this.bodyParts.torso, { x: 0, y: 0 });
-    Matter.Body.setAngularVelocity(this.bodyParts.torso, 0);
-
-    // Reset all body parts
-    Object.values(this.bodyParts).forEach(part => {
-        Matter.Body.setVelocity(part, { x: 0, y: 0 });
-        Matter.Body.setAngularVelocity(part, 0);
-        Matter.Body.setPosition(part, {
-            x: part.position.x,
-            y: part.position.y
-        });
-    });
-
-    // Reset stats
-    this.health = this.maxHealth;
-    this.stamina = this.maxStamina;
-    this.isAttacking = false;
-    this.isBlocking = false;
-    this.attackCooldown = 0;
-    this.currentAnimation = 'idle';
-}
-
-// Movement methods
-move(direction) {
-    if (!this.isGrounded) return;
-
-    const force = direction * 0.001;
-    Matter.Body.setVelocity(this.bodyParts.torso, {
-        x: this.bodyParts.torso.velocity.x + force,
-        y: this.bodyParts.torso.velocity.y
-    });
-
-    // Limit horizontal velocity
-    const maxVelocity = 5;
-    if (Math.abs(this.bodyParts.torso.velocity.x) > maxVelocity) {
+    stopMoving() {
+        // Gradually slow down instead of stopping immediately
+        const currentVelocity = this.bodyParts.torso.velocity;
         Matter.Body.setVelocity(this.bodyParts.torso, {
-            x: direction * maxVelocity,
-            y: this.bodyParts.torso.velocity.y
+            x: currentVelocity.x * 0.8,
+            y: currentVelocity.y
         });
     }
-}
 
-stopMoving() {
-    // Gradually slow down instead of stopping immediately
-    const currentVelocity = this.bodyParts.torso.velocity;
-    Matter.Body.setVelocity(this.bodyParts.torso, {
-        x: currentVelocity.x * 0.8,
-        y: currentVelocity.y
-    });
-}
-
-// Combat methods
-executeMove(moveType) {
-    switch (moveType) {
-        case 'punch':
-            return this.executePunch();
-        case 'kick':
-            return this.executeKick();
-        case 'jump':
-            return this.executeJump();
-        case 'block':
-            return this.executeBlock();
-        default:
-            return false;
+    // Combat methods
+    executeMove(moveType) {
+        switch (moveType) {
+            case 'punch':
+                return this.executePunch();
+            case 'kick':
+                return this.executeKick();
+            case 'jump':
+                return this.executeJump();
+            case 'block':
+                return this.executeBlock();
+            default:
+                return false;
+        }
     }
-}
 
-// Getters
-getHealthPercent() {
-    return (this.health / this.maxHealth) * 100;
-}
+    // Getters
+    getHealthPercent() {
+        return (this.health / this.maxHealth) * 100;
+    }
 
-getStaminaPercent() {
-    return (this.stamina / this.maxStamina) * 100;
-}
+    getStaminaPercent() {
+        return (this.stamina / this.maxStamina) * 100;
+    }
 
-getCenterPosition() {
-    return this.bodyParts.torso.position;
-}
+    getCenterPosition() {
+        return this.bodyParts.torso.position;
+    }
 
-isAlive() {
-    return this.health > 0;
-}
+    isAlive() {
+        return this.health > 0;
+    }
 }

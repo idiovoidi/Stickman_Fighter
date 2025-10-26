@@ -107,7 +107,7 @@ document.addEventListener('visibilitychange', () => {
 
 // Handle window resize
 window.addEventListener('resize', () => {
-    if (window.StickFighterGame && window.StickFighterGame.gameEngine) {
+    if (window.StickFighterGame && window.StickFighterGame.gameEngine && window.StickFighterGame.gameEngine.handleResize) {
         window.StickFighterGame.gameEngine.handleResize();
     }
 });

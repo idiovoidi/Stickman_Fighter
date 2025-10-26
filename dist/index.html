@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stick Fighter - Modern Combat</title>
+    <meta name="description" content="A modern stick figure fighting game built with Matter.js physics">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            color: white;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.5s ease;
+        }
+
+        #loading.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #00d4ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #loading p {
+            font-size: 1.2em;
+            color: #00d4ff;
+        }
+
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .game-ui {
+            pointer-events: auto;
+        }
+
+        #health-bars {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .health-bar {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            padding: 10px;
+            min-width: 200px;
+        }
+
+        .health-fill {
+            height: 20px;
+            background: linear-gradient(90deg, #ff4444, #ff8844);
+            border-radius: 10px;
+            transition: width 0.3s ease;
+            position: relative;
+        }
+
+        .health-fill.player2 {
+            background: linear-gradient(90deg, #44ff44, #88ff88);
+        }
+
+        .health-text {
+            font-size: 0.9em;
+            margin-top: 5px;
+            text-align: center;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+        }
+
+        #game-title {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 2em;
+            font-weight: bold;
+            background: linear-gradient(45deg, #00d4ff, #ff6b6b);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        @media (max-width: 768px) {
+            #controls {
+                font-size: 0.8em;
+                padding: 10px;
+            }
+
+            #game-title {
+                font-size: 1.5em;
+            }
+        }
+    </style>
+  <script type="module" crossorigin src="/assets/index-ab88fcf5.js"></script>
+</head>
+<body>
+    <div id="loading">
+        <div class="spinner"></div>
+        <p>Loading Stick Fighter...</p>
+    </div>
+
+    <div id="game-container">
+        <div id="ui-overlay">
+            <div id="game-title">Stick Fighter</div>
+            <div id="health-bars" class="hidden">
+                <div class="health-bar">
+                    <div class="health-fill player1" style="width: 100%"></div>
+                    <div class="health-text">Player 1: 100%</div>
+                </div>
+                <div class="health-bar">
+                    <div class="health-fill player2" style="width: 100%"></div>
+                    <div class="health-text">Player 2: 100%</div>
+                </div>
+            </div>
+            <div id="controls" class="game-ui">
+                <h3>Controls</h3>
+                <p><strong>Player 1:</strong> A/D (Move) W (Jump) Space (Attack)</p>
+                <p><strong>Player 2:</strong> ←/→ (Move) ↑ (Jump) Enter (Attack)</p>
+                <p><strong>General:</strong> R (Reset) P (Pause) D (Debug)</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game scripts will be injected by Vite -->
+    
+</body>
+</html>

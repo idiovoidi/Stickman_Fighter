@@ -64,10 +64,12 @@ export class GameEngine {
         // Create fighters
         await this.createFighters();
 
-        // Connect UI to game
-        this.uiManager.setGameEngine(this);
-
         console.log('✅ Game Engine initialized');
+    }
+
+    // Set UI manager reference
+    setUIManager(uiManager) {
+        this.uiManager = uiManager;
     }
 
     setupWorld() {
@@ -203,7 +205,9 @@ export class GameEngine {
         Matter.Engine.update(this.physicsEngine, deltaTime * 1000);
 
         // Update input
-        this.inputManager.update(deltaTime);
+        if (this.inputManager && this.inputManager.update) {
+            this.inputManager.update(deltaTime);
+        }
 
         // Update fighters
         this.fighters.forEach(fighter => fighter.update(deltaTime));
@@ -212,10 +216,14 @@ export class GameEngine {
         this.aiControllers.forEach(ai => ai.update(deltaTime));
 
         // Update game state
-        this.gameState.update(deltaTime);
+        if (this.gameState && this.gameState.update) {
+            this.gameState.update(deltaTime);
+        }
 
         // Check collisions
-        this.collisionManager.update();
+        if (this.collisionManager && this.collisionManager.update) {
+            this.collisionManager.update();
+        }
     }
 
     reset() {
@@ -241,12 +249,18 @@ export class GameEngine {
     }
 
     toggleDebug() {
-        this.renderer.toggleDebug();
-        this.uiManager.toggleDebugPanel();
+        if (this.renderer && this.renderer.toggleDebug) {
+            this.renderer.toggleDebug();
+        }
+        if (this.uiManager && this.uiManager.toggleDebugPanel) {
+            this.uiManager.toggleDebugPanel();
+        }
     }
 
     handleResize() {
-        this.renderer.handleResize();
+        if (this.renderer && this.renderer.handleResize) {
+            this.renderer.handleResize();
+        }
     }
 
     // Getters for external access

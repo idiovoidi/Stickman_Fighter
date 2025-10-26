@@ -3,6 +3,8 @@
  * Provides clean interface for physics operations
  */
 
+import Matter from 'matter-js';
+
 export class PhysicsManager {
     constructor() {
         this.engine = null;

@@ -9,14 +9,14 @@ export class AIController {
         this.opponent = opponent;
         this.difficulty = difficulty;
 
+        // Behavior parameters based on difficulty
+        this.params = this.getDifficultyParams();
+
         // AI state
         this.state = 'idle';
         this.targetPosition = null;
         this.lastDecisionTime = 0;
         this.decisionCooldown = this.getDecisionCooldown();
-
-        // Behavior parameters based on difficulty
-        this.params = this.getDifficultyParams();
 
         // Personality traits
         this.personality = this.generatePersonality();
