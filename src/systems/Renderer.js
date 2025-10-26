@@ -12,7 +12,7 @@ export class Renderer {
 
         this.canvas = null;
         this.context = null;
-        this.devicePixelRatio = window.devicePixelRatio || 1;
+        this.devicePixelRatio = 1; // Fixed to 1 to prevent scaling issues
 
         this.config = {
             backgroundColor: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
@@ -34,8 +34,6 @@ export class Renderer {
 
         this.setupCanvas();
         this.setupContext();
-        // Update canvas size again after context is ready
-        this.updateCanvasSize();
         this.setupLayers();
         this.setupEffects();
         this.setupEventListeners();
@@ -73,7 +71,7 @@ export class Renderer {
         this.context = this.canvas.getContext('2d');
         this.context.imageSmoothingEnabled = this.config.enableSmoothing;
 
-        // Context scaling is now handled in updateCanvasSize()
+        // No scaling needed since devicePixelRatio = 1
     }
 
     setupLayers() {
@@ -130,10 +128,7 @@ export class Renderer {
         this.canvas.width = rect.width * this.devicePixelRatio;
         this.canvas.height = rect.height * this.devicePixelRatio;
 
-        // Update context scale only if context exists
-        if (this.context) {
-            this.context.scale(this.devicePixelRatio, this.devicePixelRatio);
-        }
+        // Context scaling removed since devicePixelRatio = 1
     }
 
     handleResize() {
@@ -284,19 +279,47 @@ export class Renderer {
 
         // Body shadow
         this.context.fillStyle = 'rgba(0, 0, 0, 0.2)';
-        this.context.fillRect(-body.bounds.max.x + position.x + 2, -body.bounds.max.y + position.y + 2,
-                           body.bounds.max.x * 2, body.bounds.max.y * 2);
+
+        // Render based on body shape
+        if (body.circleRadius) {
+            // Circle body (like head)
+            this.context.beginPath();
+            this.context.arc(2, 2, body.circleRadius, 0, Math.PI * 2);
+            this.context.fill();
+        } else {
+            // Rectangle body (torso, arms, legs)
+            this.context.fillRect(-body.bounds.max.x + 2, -body.bounds.max.y + 2,
+                               body.bounds.max.x * 2, body.bounds.max.y * 2);
+        }
 
         // Body
         this.context.fillStyle = render.fillStyle || '#e74c3c';
-        this.context.fillRect(-body.bounds.max.x + position.x, -body.bounds.max.y + position.y,
-                           body.bounds.max.x * 2, body.bounds.max.y * 2);
+
+        if (body.circleRadius) {
+            // Circle body (like head)
+            this.context.beginPath();
+            this.context.arc(0, 0, body.circleRadius, 0, Math.PI * 2);
+            this.context.fill();
+        } else {
+            // Rectangle body (torso, arms, legs)
+            this.context.fillRect(-body.bounds.max.x, -body.bounds.max.y,
+                               body.bounds.max.x * 2, body.bounds.max.y * 2);
+        }
 
         // Body outline
         this.context.strokeStyle = '#2c3e50';
         this.context.lineWidth = 2;
-        this.context.strokeRect(-body.bounds.max.x + position.x, -body.bounds.max.y + position.y,
-                             body.bounds.max.x * 2, body.bounds.max.y * 2);
+
+        if (body.circleRadius) {
+            // Circle outline
+            this.context.beginPath();
+            this.context.arc(0, 0, body.circleRadius, 0, Math.PI * 2);
+            this.context.stroke();
+        } else {
+            // Rectangle outline
+            this.context.strokeRect(-body.bounds.max.x, -body.bounds.max.y,
+                                 body.bounds.max.x * 2, body.bounds.max.y * 2);
+        }
 
         this.context.restore();
     }
