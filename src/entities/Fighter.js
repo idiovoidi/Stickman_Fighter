@@ -1,481 +1,380 @@
 /**
- * Fighter - Represents a stick figure fighter in the game
- * Handles physics, animation, and combat mechanics
+ * Fighter - a stick figure composed of a kinematic body, vitals, skeleton and animator.
+ * Controllers (human or AI) feed it an intent each step; the fighter's state machine
+ * decides what that intent is allowed to do.
  */
 
-import Matter from 'matter-js';
+import { MOVES, isKnownMove } from '../combat/moves.js';
+import { UnknownMoveError } from '../errors/GameErrors.js';
+import { decorateMethods, validateArgs } from '../utils/decorators.js';
+import { clamp } from '../utils/math.js';
+import { Ragdoll } from './components/Ragdoll.js';
+
+export const NEUTRAL_INTENT = Object.freeze({ move: 0, jump: false, block: false, attack: null, dash: 0 });
+
+const ACTIONABLE_STATES = new Set(['idle', 'airborne', 'block']);
+const INVULNERABLE_STATES = new Set(['knockdown', 'getup', 'ko', 'victory']);
 
 export class Fighter {
-    constructor(x, y, options = {}) {
-        this.position = { x, y };
-        this.options = {
-            isPlayer1: true,
-            color: '#e74c3c',
-            controls: {
-                left: 'KeyA',
-                right: 'KeyD',
-                jump: 'KeyW',
-                attack: 'Space'
-            },
-            ...options
-        };
+    constructor({ id, side, profile, body, vitals, skeleton, animator, events, config }) {
+        this.id = id;
+        this.side = side;
+        this.profile = profile;
+        this.body = body;
+        this.vitals = vitals;
+        this.skeleton = skeleton;
+        this.animator = animator;
+        this.events = events;
+        this.config = config;
 
-        this.bodyParts = {};
-        this.constraints = [];
-        this.moves = [];
-
-        // Fighter stats
-        this.health = 100;
-        this.maxHealth = 100;
-        this.stamina = 100;
-        this.maxStamina = 100;
-
-        // Combat state
-        this.isAttacking = false;
-        this.isBlocking = false;
-        this.isJumping = false;
-        this.isGrounded = true;
-        this.attackCooldown = 0;
-        this.lastAttackTime = 0;
-
-        // Animation state
-        this.currentAnimation = 'idle';
-        this.animationFrame = 0;
-
-        // Create the fighter's physical body
-        this.createBody();
-        this.setupMoves();
-        this.setupAnimation();
+        this.state = 'idle';
+        this.stateTime = 0;
+        this.attack = null;
+        this.attackSerial = 0;
+        this.stunTimer = 0;
+        this.launched = false;
+        this.juggles = 0;
+        this.comboHits = 0;
+        this.flashTimer = 0;
+        this.landingTimer = 0;
+        this.airAttackUsed = false;
+        this.ragdoll = null;
+        this.debugLabel = '';
     }
 
-    createBody() {
-        const { color } = this.options;
+    get name() { return this.profile.name; }
+    get stats() { return this.profile.stats; }
+    get isAlive() { return this.vitals.health > 0; }
+    get isActionable() { return ACTIONABLE_STATES.has(this.state); }
+    get isInvulnerable() { return INVULNERABLE_STATES.has(this.state); }
 
-        // Create body parts with proper physics properties
-        this.bodyParts = {
-            head: Matter.Bodies.circle(this.position.x, this.position.y - 50, 12, {
-                render: { fillStyle: color },
-                friction: 0.8,
-                restitution: 0.3,
-                density: 0.001
-            }),
-
-            torso: Matter.Bodies.rectangle(this.position.x, this.position.y, 12, 35, {
-                render: { fillStyle: color },
-                friction: 0.8,
-                restitution: 0.2,
-                density: 0.001
-            }),
-
-            leftArm: Matter.Bodies.rectangle(
-                this.position.x - 18, this.position.y - 15,
-                25, 4,
-                {
-                    render: { fillStyle: color },
-                    friction: 0.6,
-                    restitution: 0.4,
-                    density: 0.0005
-                }
-            ),
-
-            rightArm: Matter.Bodies.rectangle(
-                this.position.x + 18, this.position.y - 15,
-                25, 4,
-                {
-                    render: { fillStyle: color },
-                    friction: 0.6,
-                    restitution: 0.4,
-                    density: 0.0005
-                }
-            ),
-
-            leftLeg: Matter.Bodies.rectangle(
-                this.position.x - 8, this.position.y + 25,
-                4, 30,
-                {
-                    render: { fillStyle: color },
-                    friction: 0.9,
-                    restitution: 0.1,
-                    density: 0.0008
-                }
-            ),
-
-            rightLeg: Matter.Bodies.rectangle(
-                this.position.x + 8, this.position.y + 25,
-                4, 30,
-                {
-                    render: { fillStyle: color },
-                    friction: 0.9,
-                    restitution: 0.1,
-                    density: 0.0008
-                }
-            )
-        };
-
-        // Create joints between body parts
-        this.constraints = [
-            // Head to torso
-            Matter.Constraint.create({
-                bodyA: this.bodyParts.head,
-                bodyB: this.bodyParts.torso,
-                pointA: { x: 0, y: 12 },
-                pointB: { x: 0, y: -17 },
-                stiffness: 0.8,
-                damping: 0.1,
-                render: { visible: false }
-            }),
-
-            // Arms to torso
-            Matter.Constraint.create({
-                bodyA: this.bodyParts.torso,
-                bodyB: this.bodyParts.leftArm,
-                pointA: { x: -6, y: -12 },
-                pointB: { x: 12, y: 0 },
-                stiffness: 0.6,
-                damping: 0.05,
-                render: { visible: false }
-            }),
-
-            Matter.Constraint.create({
-                bodyA: this.bodyParts.torso,
-                bodyB: this.bodyParts.rightArm,
-                pointA: { x: 6, y: -12 },
-                pointB: { x: -12, y: 0 },
-                stiffness: 0.6,
-                damping: 0.05,
-                render: { visible: false }
-            }),
-
-            // Legs to torso
-            Matter.Constraint.create({
-                bodyA: this.bodyParts.torso,
-                bodyB: this.bodyParts.leftLeg,
-                pointA: { x: -4, y: 17 },
-                pointB: { x: 0, y: -15 },
-                stiffness: 0.7,
-                damping: 0.05,
-                render: { visible: false }
-            }),
-
-            Matter.Constraint.create({
-                bodyA: this.bodyParts.torso,
-                bodyB: this.bodyParts.rightLeg,
-                pointA: { x: 4, y: 17 },
-                pointB: { x: 0, y: -15 },
-                stiffness: 0.7,
-                damping: 0.05,
-                render: { visible: false }
-            })
-        ];
+    joints() {
+        return this.ragdoll ? this.ragdoll.joints : this.skeleton.joints;
     }
 
-    setupMoves() {
-        this.moves = {
-            punch: {
-                execute: () => this.executePunch(),
-                staminaCost: 15,
-                damage: 10,
-                range: 40
-            },
-
-            kick: {
-                execute: () => this.executeKick(),
-                staminaCost: 20,
-                damage: 15,
-                range: 35
-            },
-
-            jump: {
-                execute: () => this.executeJump(),
-                staminaCost: 10,
-                damage: 0,
-                range: 0
-            },
-
-            block: {
-                execute: () => this.executeBlock(),
-                staminaCost: 5,
-                damage: 0,
-                range: 0
-            }
-        };
+    focusX() {
+        return this.ragdoll ? this.ragdoll.joints.hip.x : this.body.x;
     }
 
-    setupAnimation() {
-        this.animations = {
-            idle: { frames: 1, speed: 0 },
-            walk: { frames: 4, speed: 0.2 },
-            attack: { frames: 3, speed: 0.15 },
-            hurt: { frames: 2, speed: 0.1 },
-            jump: { frames: 2, speed: 0.3 }
-        };
+    hitPoint() {
+        return this.attack ? this.skeleton.joints[this.attack.move.limb] : null;
     }
 
-    update(deltaTime) {
-        // Update attack cooldown
-        if (this.attackCooldown > 0) {
-            this.attackCooldown -= deltaTime;
+    faceToward(x) {
+        if (!this.isActionable || !this.body.grounded) return;
+        const direction = Math.sign(x - this.body.x);
+        if (direction) this.body.facing = direction;
+    }
+
+    resetForRound(x, facing) {
+        this.body.place(x, this.config.arena.floorY, facing);
+        this.vitals.reset();
+        this.attack = null;
+        this.ragdoll = null;
+        this.stunTimer = 0;
+        this.launched = false;
+        this.juggles = 0;
+        this.comboHits = 0;
+        this.flashTimer = 0;
+        this.landingTimer = 0;
+        this.#setState('idle');
+        this.animator.reset();
+        this.skeleton.solve(this.animator.current, facing, this.body.x, this.body.y);
+    }
+
+    update(dt, intent, world) {
+        this.stateTime += dt;
+        this.flashTimer = Math.max(0, this.flashTimer - dt);
+        this.landingTimer = Math.max(0, this.landingTimer - dt);
+
+        if (this.state === 'ko') {
+            this.ragdoll.update(dt, world);
+            this.body.x = this.ragdoll.joints.hip.x;
+            return;
         }
 
-        // Regenerate stamina slowly
-        if (this.stamina < this.maxStamina) {
-            this.stamina += 10 * deltaTime;
-            this.stamina = Math.min(this.stamina, this.maxStamina);
-        }
-
-        // Update animation
-        this.updateAnimation(deltaTime);
-
-        // Check if fighter is grounded
-        this.checkGrounded();
+        this.vitals.update(dt);
+        this.#runState(dt, intent);
+        const landing = this.body.integrate(dt, world);
+        if (landing) this.#onLand(landing);
+        this.animator.update(dt, this);
+        this.skeleton.solve(this.animator.current, this.body.facing, this.body.x, this.body.y);
     }
 
-    updateAnimation(deltaTime) {
-        const animation = this.animations[this.currentAnimation];
-        if (animation) {
-            this.animationFrame += animation.speed * deltaTime * 60; // 60 FPS base
-            if (this.animationFrame >= animation.frames) {
-                this.animationFrame = 0;
-            }
-        }
-    }
-
-    checkGrounded() {
-        const torso = this.bodyParts.torso;
-        const groundY = 580; // Ground level
-        const tolerance = 10;
-
-        this.isGrounded = Math.abs(torso.position.y - groundY + 17) < tolerance;
-    }
-
-    executePunch() {
-        if (this.isAttacking || this.attackCooldown > 0 || this.stamina < this.moves.punch.staminaCost) {
-            return false;
-        }
-
-        this.isAttacking = true;
-        this.stamina -= this.moves.punch.staminaCost;
-        this.attackCooldown = 0.5;
-        this.currentAnimation = 'attack';
-
-        const arm = this.options.isPlayer1 ? this.bodyParts.rightArm : this.bodyParts.leftArm;
-        const direction = this.options.isPlayer1 ? 1 : -1;
-
-        // Apply punch force
-        Matter.Body.setAngularVelocity(arm, direction * 0.3);
-        Matter.Body.setVelocity(arm, {
-            x: direction * 15,
-            y: -3
-        });
-
-        // Reset attack state after animation
-        setTimeout(() => {
-            this.isAttacking = false;
-            this.currentAnimation = 'idle';
-        }, 400);
-
+    tryAttack(moveId) {
+        const move = MOVES[moveId];
+        if (!this.isActionable) return false;
+        if (move.air === this.body.grounded) return false;
+        if (move.air && this.airAttackUsed) return false;
+        if (this.vitals.meter < move.meterCost) return false;
+        if (!this.vitals.spendStamina(move.stamina)) return false;
+        this.vitals.spendMeter(move.meterCost);
+        this.#startAttack(move);
         return true;
     }
 
-    executeKick() {
-        if (this.isAttacking || this.attackCooldown > 0 || this.stamina < this.moves.kick.staminaCost) {
-            return false;
+    canCancelInto(moveId) {
+        const attack = this.attack;
+        const next = MOVES[moveId];
+        if (!attack || !attack.hasHit || attack.phase === 'startup') return false;
+        if (!attack.move.cancelInto.includes(moveId)) return false;
+        if (next.air === this.body.grounded) return false;
+        return this.vitals.stamina >= next.stamina && this.vitals.meter >= next.meterCost;
+    }
+
+    receiveHit({ attacker, move, direction, damageScale }) {
+        if (this.isInvulnerable) return null;
+        const combat = this.config.combat;
+        this.flashTimer = 0.09;
+
+        const facingAttacker = this.body.facing === -direction;
+        const guarding = (this.state === 'block' || this.state === 'blockstun') && facingAttacker;
+        if (guarding) return this.#absorbBlockedHit(move, direction);
+
+        const counter = this.state === 'attack' && this.attack?.phase === 'startup';
+        const damage = (move.damage * attacker.stats.power * damageScale * (counter ? combat.counterBonus : 1)) / this.stats.defense;
+        this.vitals.damage(damage);
+        this.vitals.addMeter(damage * combat.meterGainOnHurt);
+        this.attack = null;
+        this.comboHits += 1;
+
+        if (!this.isAlive) {
+            this.#knockOut(move, direction);
+            return { blocked: false, guardBreak: false, damage, counter, ko: true };
         }
 
-        this.isAttacking = true;
-        this.stamina -= this.moves.kick.staminaCost;
-        this.attackCooldown = 0.7;
-        this.currentAnimation = 'attack';
-
-        const leg = this.options.isPlayer1 ? this.bodyParts.rightLeg : this.bodyParts.leftLeg;
-        const direction = this.options.isPlayer1 ? 1 : -1;
-
-        // Apply kick force
-        Matter.Body.setAngularVelocity(leg, direction * 0.4);
-        Matter.Body.setVelocity(leg, {
-            x: direction * 20,
-            y: 0
-        });
-
-        // Reset attack state after animation
-        setTimeout(() => {
-            this.isAttacking = false;
-            this.currentAnimation = 'idle';
-        }, 600);
-
-        return true;
-    }
-
-    executeJump() {
-        if (this.stamina < this.moves.jump.staminaCost || !this.isGrounded) {
-            return false;
+        const shouldLaunch = move.launch > 0 || move.knockdown || !this.body.grounded;
+        if (shouldLaunch && this.juggles < combat.maxJuggles) {
+            this.juggles += 1;
+            this.launched = true;
+            this.body.launch(direction * move.knockback, -(move.launch || (move.knockdown ? 320 : 420)));
+        } else if (shouldLaunch) {
+            this.launched = true;
+            this.body.vx = direction * move.knockback * 0.5;
+        } else {
+            this.launched = false;
+            this.body.vx = direction * move.knockback;
         }
-
-        this.stamina -= this.moves.jump.staminaCost;
-        this.currentAnimation = 'jump';
-
-        // Apply jump force to torso
-        Matter.Body.setVelocity(this.bodyParts.torso, {
-            x: this.bodyParts.torso.velocity.x,
-            y: this.bodyParts.torso.velocity.y - 12
-        });
-
-        return true;
+        this.stunTimer = move.hitstun;
+        this.#setState('hitstun');
+        return { blocked: false, guardBreak: false, damage, counter, ko: false };
     }
 
-    executeBlock() {
-        if (this.stamina < this.moves.block.staminaCost) {
-            return false;
-        }
-
-        this.isBlocking = true;
-        this.stamina -= this.moves.block.staminaCost * 0.1; // Continuous drain while blocking
-        this.currentAnimation = 'block';
-
-        return true;
+    onHitLanded(outcome) {
+        if (this.attack) this.attack.hasHit = true;
+        if (!outcome.blocked) this.vitals.addMeter(outcome.damage * this.config.combat.meterGainOnHit);
     }
 
-    stopBlocking() {
-        this.isBlocking = false;
-        this.currentAnimation = 'idle';
+    celebrate() {
+        if (this.state === 'ko') return;
+        this.attack = null;
+        this.#setState('victory');
     }
 
-    takeDamage(damage, attacker = null) {
-        if (this.isBlocking) {
-            damage *= 0.3; // Reduce damage while blocking
-        }
-
-        this.health -= damage;
-        this.health = Math.max(0, this.health);
-
-        if (this.health > 0) {
-            this.currentAnimation = 'hurt';
-            setTimeout(() => {
-                if (this.currentAnimation === 'hurt') {
-                    this.currentAnimation = 'idle';
-                }
-            }, 300);
-        }
-
-        // Flash effect
-        this.flashEffect();
-
-        // Apply knockback if attacker is provided
-        if (attacker) {
-            this.applyKnockback(attacker, damage);
-        }
-
-        return this.health <= 0; // Return true if fighter is defeated
+    #setState(next) {
+        this.state = next;
+        this.stateTime = 0;
     }
 
-    applyKnockback(attacker, damage) {
-        const direction = this.options.isPlayer1 ?
-            { x: 1, y: 0 } : { x: -1, y: 0 };
+    #runState(dt, intent) {
+        const { body } = this;
+        const friction = this.config.physics.groundFriction;
+        const tuning = this.config.fighter;
 
-        const knockbackForce = damage * 0.01;
-        Matter.Body.applyForce(this.bodyParts.torso, this.bodyParts.torso.position, {
-            x: direction.x * knockbackForce,
-            y: direction.y * knockbackForce * 0.5
-        });
-    }
-
-    flashEffect() {
-        const originalColor = this.options.color;
-        Object.values(this.bodyParts).forEach(part => {
-            part.render.fillStyle = '#ffffff';
-        });
-
-        setTimeout(() => {
-            Object.values(this.bodyParts).forEach(part => {
-                part.render.fillStyle = originalColor;
-            });
-        }, 100);
-    }
-
-    reset() {
-        // Reset position
-        Matter.Body.setPosition(this.bodyParts.torso, this.position);
-        Matter.Body.setVelocity(this.bodyParts.torso, { x: 0, y: 0 });
-        Matter.Body.setAngularVelocity(this.bodyParts.torso, 0);
-
-        // Reset all body parts
-        Object.values(this.bodyParts).forEach(part => {
-            Matter.Body.setVelocity(part, { x: 0, y: 0 });
-            Matter.Body.setAngularVelocity(part, 0);
-            Matter.Body.setPosition(part, {
-                x: part.position.x,
-                y: part.position.y
-            });
-        });
-
-        // Reset stats
-        this.health = this.maxHealth;
-        this.stamina = this.maxStamina;
-        this.isAttacking = false;
-        this.isBlocking = false;
-        this.attackCooldown = 0;
-        this.currentAnimation = 'idle';
-    }
-
-    // Movement methods
-    move(direction) {
-        if (!this.isGrounded) return;
-
-        const force = direction * 0.001;
-        Matter.Body.setVelocity(this.bodyParts.torso, {
-            x: this.bodyParts.torso.velocity.x + force,
-            y: this.bodyParts.torso.velocity.y
-        });
-
-        // Limit horizontal velocity
-        const maxVelocity = 5;
-        if (Math.abs(this.bodyParts.torso.velocity.x) > maxVelocity) {
-            Matter.Body.setVelocity(this.bodyParts.torso, {
-                x: direction * maxVelocity,
-                y: this.bodyParts.torso.velocity.y
-            });
-        }
-    }
-
-    stopMoving() {
-        // Gradually slow down instead of stopping immediately
-        const currentVelocity = this.bodyParts.torso.velocity;
-        Matter.Body.setVelocity(this.bodyParts.torso, {
-            x: currentVelocity.x * 0.8,
-            y: currentVelocity.y
-        });
-    }
-
-    // Combat methods
-    executeMove(moveType) {
-        switch (moveType) {
-            case 'punch':
-                return this.executePunch();
-            case 'kick':
-                return this.executeKick();
-            case 'jump':
-                return this.executeJump();
+        switch (this.state) {
+            case 'idle':
+                this.#runIdle(dt, intent);
+                return;
+            case 'airborne':
+                this.#runAirborne(dt, intent);
+                return;
+            case 'attack':
+                this.#runAttack(dt, intent);
+                return;
             case 'block':
-                return this.executeBlock();
+                body.brake(dt, friction * 2);
+                if (intent.attack && this.tryAttack(intent.attack)) return;
+                if (!intent.block) this.#setState('idle');
+                return;
+            case 'blockstun':
+                body.brake(dt, friction);
+                this.stunTimer -= dt;
+                if (this.stunTimer <= 0) this.#setState(intent.block ? 'block' : 'idle');
+                return;
+            case 'hitstun':
+                if (body.grounded) body.brake(dt, friction);
+                if (this.launched) return;
+                this.stunTimer -= dt;
+                if (this.stunTimer <= 0) this.#recover();
+                return;
+            case 'knockdown':
+                body.brake(dt, friction * 1.5);
+                if (this.stateTime >= tuning.knockdownTime) this.#setState('getup');
+                return;
+            case 'getup':
+                if (this.stateTime >= tuning.getupTime) this.#recover();
+                return;
+            case 'dash':
+                if (this.stateTime > tuning.dashTime * 0.5) body.brake(dt, friction * 2);
+                if (this.stateTime >= tuning.dashTime) this.#setState('idle');
+                return;
+            case 'victory':
+                body.brake(dt, friction);
+                return;
             default:
-                return false;
+                return;
         }
     }
 
-    // Getters
-    getHealthPercent() {
-        return (this.health / this.maxHealth) * 100;
+    #runIdle(dt, intent) {
+        const { body } = this;
+        const tuning = this.config.fighter;
+        if (!body.grounded) {
+            this.#setState('airborne');
+            return;
+        }
+        if (intent.attack && this.tryAttack(intent.attack)) return;
+        if (intent.block) {
+            this.#setState('block');
+            return;
+        }
+        if (intent.jump) {
+            this.#jump(intent.move);
+            return;
+        }
+        if (intent.dash && this.vitals.spendStamina(tuning.dashStamina)) {
+            this.#dash(intent.dash);
+            return;
+        }
+        const backward = intent.move !== 0 && intent.move === -body.facing;
+        const speed = tuning.walkSpeed * this.stats.speed * (backward ? tuning.backwalkRatio : 1);
+        body.steer(dt, intent.move * speed, 14);
     }
 
-    getStaminaPercent() {
-        return (this.stamina / this.maxStamina) * 100;
+    #runAirborne(dt, intent) {
+        const { body } = this;
+        const tuning = this.config.fighter;
+        const maxSpeed = tuning.walkSpeed * this.stats.speed * tuning.jumpCarry;
+        body.vx = clamp(body.vx + intent.move * this.config.physics.airControl * dt, -maxSpeed, maxSpeed);
+        if (intent.attack && !this.airAttackUsed) this.tryAttack('flyingKick');
     }
 
-    getCenterPosition() {
-        return this.bodyParts.torso.position;
+    #runAttack(dt, intent) {
+        const attack = this.attack;
+        const { move } = attack;
+        attack.elapsed += dt;
+
+        const phase = attack.elapsed < move.startup
+            ? 'startup'
+            : attack.elapsed < move.startup + move.active ? 'active' : 'recovery';
+        if (phase !== attack.phase) {
+            attack.phase = phase;
+            if (phase === 'active') this.#onStrike(move);
+        }
+
+        if (this.body.grounded) this.body.brake(dt, this.config.physics.groundFriction);
+
+        if (intent.attack && intent.attack !== move.id && this.canCancelInto(intent.attack)) {
+            const next = MOVES[intent.attack];
+            this.vitals.spendStamina(next.stamina);
+            this.vitals.spendMeter(next.meterCost);
+            this.#startAttack(next);
+            return;
+        }
+
+        if (attack.elapsed >= move.total) {
+            this.attack = null;
+            this.#setState(this.body.grounded ? 'idle' : 'airborne');
+        }
     }
 
-    isAlive() {
-        return this.health > 0;
+    #startAttack(move) {
+        this.attack = { move, elapsed: 0, phase: 'startup', hasHit: false };
+        this.attackSerial += 1;
+        if (move.air) this.airAttackUsed = true;
+        this.#setState('attack');
+        if (move.meterCost) this.events.emit('fighter:super', { fighter: this, move });
+    }
+
+    #onStrike(move) {
+        if (move.lunge) this.body.vx = this.body.facing * move.lunge * (0.85 + 0.15 * this.stats.speed);
+        this.events.emit('fighter:strike', { fighter: this, move });
+    }
+
+    #jump(direction) {
+        const tuning = this.config.fighter;
+        this.body.launch(direction * tuning.walkSpeed * this.stats.speed * tuning.jumpCarry, -tuning.jumpVelocity);
+        this.airAttackUsed = false;
+        this.#setState('airborne');
+        this.events.emit('fighter:jump', { fighter: this });
+    }
+
+    #dash(direction) {
+        this.body.vx = direction * this.config.fighter.dashSpeed * this.stats.speed;
+        this.#setState('dash');
+        this.events.emit('fighter:dash', { fighter: this, direction });
+    }
+
+    #recover() {
+        this.launched = false;
+        this.juggles = 0;
+        this.comboHits = 0;
+        this.#setState(this.body.grounded ? 'idle' : 'airborne');
+    }
+
+    #onLand({ impact }) {
+        const tuning = this.config.fighter;
+        this.events.emit('fighter:land', { fighter: this, impact });
+
+        if (this.state === 'airborne') {
+            this.landingTimer = tuning.landingLag;
+            this.#setState('idle');
+        } else if (this.state === 'attack' && this.attack.move.air) {
+            this.attack = null;
+            this.landingTimer = tuning.landingLag * 1.5;
+            this.#setState('idle');
+        } else if (this.state === 'hitstun' && this.launched) {
+            this.launched = false;
+            this.juggles = 0;
+            this.comboHits = 0;
+            this.#setState('knockdown');
+            this.events.emit('fighter:knockdown', { fighter: this, impact });
+        }
+    }
+
+    #absorbBlockedHit(move, direction) {
+        const combat = this.config.combat;
+        const ratio = move.blockDamageRatio ?? combat.blockDamageRatio;
+        const chip = Math.max(0, Math.min(move.damage * ratio, this.vitals.health - 1));
+        this.vitals.damage(chip);
+        this.vitals.addMeter(combat.meterGainOnBlock);
+        this.body.vx = direction * move.knockback * 0.6;
+
+        const staminaCost = combat.blockStaminaCost * (move.heavy ? 1.6 : 1);
+        if (!this.vitals.spendStamina(staminaCost)) {
+            this.vitals.drainStamina();
+            this.stunTimer = combat.guardBreakStun;
+            this.#setState('hitstun');
+            return { blocked: true, guardBreak: true, damage: chip, counter: false, ko: false };
+        }
+        this.stunTimer = 0.1 + move.hitstun * 0.35;
+        this.#setState('blockstun');
+        return { blocked: true, guardBreak: false, damage: chip, counter: false, ko: false };
+    }
+
+    #knockOut(move, direction) {
+        this.attack = null;
+        this.#setState('ko');
+        const velocity = {
+            vx: direction * (380 + move.knockback * 0.6),
+            vy: -(380 + move.launch * 0.5),
+        };
+        this.ragdoll = new Ragdoll(this.skeleton.joints, velocity, this.skeleton.bones.headRadius);
+        this.events.emit('fighter:ko', { fighter: this });
     }
 }
+
+decorateMethods(Fighter, {
+    tryAttack: validateArgs(isKnownMove, { ErrorType: UnknownMoveError }),
+    canCancelInto: validateArgs(isKnownMove, { ErrorType: UnknownMoveError }),
+});

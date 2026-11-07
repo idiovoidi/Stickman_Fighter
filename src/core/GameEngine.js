@@ -1,278 +1,199 @@
 /**
- * GameEngine - Core game logic and coordination
- * Manages physics, fighters, AI, and game state
+ * GameEngine - owns the simulation step. All collaborators are injected so each
+ * system (rendering, HUD, AI, rules) stays independent and replaceable.
  */
 
-import Matter from 'matter-js';
-import { Fighter } from '../entities/Fighter.js';
-import { InputManager } from './InputManager.js';
-import { CollisionManager } from '../systems/CollisionManager.js';
-import { GameState } from './GameState.js';
-import { Renderer } from '../systems/Renderer.js';
-import { UIManager } from '../systems/UIManager.js';
+import { NEUTRAL_INTENT } from '../entities/Fighter.js';
 
 export class GameEngine {
-    constructor() {
-        this.physicsEngine = null;
-        this.renderer = null;
-        this.inputManager = null;
-        this.collisionManager = null;
-        this.gameState = null;
-        this.uiManager = null;
+    constructor({
+        config, events, input, director, renderer, camera, hud, hitResolver,
+        createFighter, createControllers, roster, rng = Math.random,
+    }) {
+        this.config = config;
+        this.events = events;
+        this.input = input;
+        this.director = director;
+        this.renderer = renderer;
+        this.camera = camera;
+        this.hud = hud;
+        this.hitResolver = hitResolver;
+        this.createFighter = createFighter;
+        this.createControllers = createControllers;
+        this.roster = roster;
+        this.rng = rng;
 
+        this.world = { physics: config.physics, arena: config.arena };
         this.fighters = [];
-        this.aiControllers = [];
+        this.controllers = [];
+        this.session = null;
+        this.paused = false;
+        this.hitstop = 0;
+        this.debug = false;
 
-        this.isRunning = false;
-        this.lastTime = 0;
-        this.animationFrame = null;
-
-        // Game configuration
-        this.config = {
-            gravity: { x: 0, y: 1 },
-            worldBounds: { width: 800, height: 600 },
-            fighterStartPositions: [
-                { x: 200, y: 300 },
-                { x: 600, y: 300 }
-            ]
-        };
+        this.#subscribe();
     }
 
-    async init() {
-        console.log('🔧 Initializing Game Engine...');
-
-        // Initialize Matter.js physics
-        this.physicsEngine = Matter.Engine.create();
-        this.physicsEngine.world.gravity = this.config.gravity;
-
-        // Initialize game systems
-        this.gameState = new GameState();
-        this.inputManager = new InputManager();
-        this.collisionManager = new CollisionManager(this);
-        this.renderer = new Renderer(this.physicsEngine, this.config.worldBounds);
-        this.uiManager = new UIManager();
-
-        // Setup world bounds and ground
-        this.setupWorld();
-
-        // Initialize systems
-        await this.renderer.init();
-        await this.uiManager.init();
-        this.inputManager.init(this);
-        this.collisionManager.init();
-
-        // Create fighters
-        await this.createFighters();
-
-        console.log('✅ Game Engine initialized');
+    get mode() {
+        return this.session?.mode ?? 'auto';
     }
 
-    // Set UI manager reference
-    setUIManager(uiManager) {
-        this.uiManager = uiManager;
+    startMatch({ mode = 'auto', difficulty = 'normal', picks = [] } = {}) {
+        this.session = { mode, difficulty, picks, matchNumber: 1 };
+        this.#beginMatch();
     }
 
-    setupWorld() {
-        const { width, height } = this.config.worldBounds;
-
-        // Create ground
-        const ground = Matter.Bodies.rectangle(
-            width / 2, height + 20,
-            width + 40, 40,
-            {
-                isStatic: true,
-                render: { fillStyle: '#2c3e50' }
-            }
-        );
-
-        // Create walls (invisible boundaries)
-        const leftWall = Matter.Bodies.rectangle(
-            -10, height / 2,
-            20, height,
-            {
-                isStatic: true,
-                render: { visible: false }
-            }
-        );
-
-        const rightWall = Matter.Bodies.rectangle(
-            width + 10, height / 2,
-            20, height,
-            {
-                isStatic: true,
-                render: { visible: false }
-            }
-        );
-
-        Matter.World.add(this.physicsEngine.world, [ground, leftWall, rightWall]);
-    }
-
-    async createFighters() {
-        console.log('🤖 Creating fighters...');
-
-        // Create player 1 (human controlled)
-        const player1 = new Fighter(
-            this.config.fighterStartPositions[0].x,
-            this.config.fighterStartPositions[0].y,
-            {
-                isPlayer1: true,
-                color: '#e74c3c',
-                controls: {
-                    left: 'KeyA',
-                    right: 'KeyD',
-                    jump: 'KeyW',
-                    attack: 'Space'
-                }
-            }
-        );
-
-        // Create player 2 (AI controlled)
-        const player2 = new Fighter(
-            this.config.fighterStartPositions[1].x,
-            this.config.fighterStartPositions[1].y,
-            {
-                isPlayer1: false,
-                color: '#27ae60',
-                controls: {
-                    left: 'ArrowLeft',
-                    right: 'ArrowRight',
-                    jump: 'ArrowUp',
-                    attack: 'Enter'
-                }
-            }
-        );
-
-        // Add fighters to physics world
-        this.fighters = [player1, player2];
-
-        for (const fighter of this.fighters) {
-            Matter.World.add(this.physicsEngine.world, [
-                ...Object.values(fighter.bodyParts),
-                ...fighter.constraints
-            ]);
-        }
-
-        // Set up AI for player 2
-        if (player2) {
-            const { AIController } = await import('../ai/AIController.js');
-            const aiController = new AIController(player2, player1);
-            this.aiControllers.push(aiController);
-        }
-
-        console.log('✅ Fighters created');
-    }
-
-    start() {
-        if (this.isRunning) return;
-
-        console.log('🚀 Starting game loop...');
-        this.isRunning = true;
-        this.gameState.setState('playing');
-        this.gameLoop();
+    rematch() {
+        if (this.session) this.#beginMatch();
     }
 
     pause() {
-        this.isRunning = false;
-        this.gameState.setState('paused');
+        this.paused = true;
     }
 
     resume() {
-        if (!this.isRunning) {
-            this.isRunning = true;
-            this.gameState.setState('playing');
-            this.gameLoop();
-        }
-    }
-
-    gameLoop = (currentTime = 0) => {
-        if (!this.isRunning) return;
-
-        const deltaTime = Math.min((currentTime - this.lastTime) / 1000, 1/30); // Cap at 30fps minimum
-        this.lastTime = currentTime;
-
-        // Update game systems
-        this.update(deltaTime);
-
-        // Render
-        this.renderer.render();
-
-        // Continue loop
-        this.animationFrame = requestAnimationFrame(this.gameLoop);
-    };
-
-    update(deltaTime) {
-        // Update physics
-        Matter.Engine.update(this.physicsEngine, deltaTime * 1000);
-
-        // Update input
-        if (this.inputManager && this.inputManager.update) {
-            this.inputManager.update(deltaTime);
-        }
-
-        // Update fighters
-        this.fighters.forEach(fighter => fighter.update(deltaTime));
-
-        // Update AI
-        this.aiControllers.forEach(ai => ai.update(deltaTime));
-
-        // Update game state
-        if (this.gameState && this.gameState.update) {
-            this.gameState.update(deltaTime);
-        }
-
-        // Check collisions
-        if (this.collisionManager && this.collisionManager.update) {
-            this.collisionManager.update();
-        }
-    }
-
-    reset() {
-        console.log('🔄 Resetting game...');
-
-        // Reset fighters
-        this.fighters.forEach(fighter => fighter.reset());
-
-        // Reset game state
-        this.gameState.reset();
-
-        console.log('✅ Game reset');
-    }
-
-    // Control methods
-    togglePause() {
-        this.gameState.togglePause();
-        if (this.gameState.isState('paused')) {
-            this.pause();
-        } else {
-            this.resume();
-        }
+        this.paused = false;
+        this.input.clearPresses();
     }
 
     toggleDebug() {
-        if (this.renderer && this.renderer.toggleDebug) {
-            this.renderer.toggleDebug();
+        this.debug = !this.debug;
+    }
+
+    update(dt) {
+        if (this.paused || !this.fighters.length) return;
+        const worldDt = dt * this.director.timeScale;
+        this.director.update(dt);
+
+        if (this.hitstop > 0) {
+            this.hitstop = Math.max(0, this.hitstop - dt);
+        } else {
+            this.#stepFighters(worldDt);
         }
-        if (this.uiManager && this.uiManager.toggleDebugPanel) {
-            this.uiManager.toggleDebugPanel();
+
+        this.renderer.update(worldDt, this.fighters);
+        this.camera.update(dt, this.fighters, this.renderer.view);
+        this.hud.update(this.fighters, this.director);
+    }
+
+    render() {
+        this.renderer.render({ fighters: this.fighters, debug: this.debug });
+    }
+
+    #beginMatch() {
+        const { mode, difficulty, picks, matchNumber } = this.session;
+        const profiles = this.#chooseProfiles(picks);
+
+        this.fighters = profiles.map((profile, side) => this.createFighter({
+            profile, side, events: this.events, config: this.config,
+        }));
+        this.controllers = this.createControllers({
+            mode, difficulty, fighters: this.fighters, input: this.input, rng: this.rng,
+        });
+
+        this.renderer.clearEffects();
+        this.input.clearPresses();
+        this.hud.bind(this.fighters, mode);
+        this.paused = false;
+        this.hitstop = 0;
+
+        this.director.begin({
+            fighters: this.fighters,
+            autoContinue: mode === 'auto',
+            matchNumber,
+            onRoundSetup: () => this.#setupRound(),
+            onMatchComplete: () => this.#nextAutoMatch(),
+        });
+        this.camera.snap(this.fighters, this.renderer.view);
+        this.events.emit('match:start', { fighters: this.fighters, mode, matchNumber });
+    }
+
+    #nextAutoMatch() {
+        this.session.matchNumber += 1;
+        this.#beginMatch();
+    }
+
+    #setupRound() {
+        const { width, spawnOffset } = this.config.arena;
+        this.fighters.forEach((fighter, side) => {
+            const x = width / 2 + (side === 0 ? -spawnOffset : spawnOffset);
+            fighter.resetForRound(x, side === 0 ? 1 : -1);
+        });
+        this.controllers.forEach((controller) => controller.reset?.());
+        this.hitstop = 0;
+    }
+
+    /** Uses explicit picks where given, otherwise random distinct fighters. Mirror picks get recoloured. */
+    #chooseProfiles(picks) {
+        const chosen = [0, 1].map((side) => this.roster.find((profile) => profile.id === picks[side]) ?? null);
+        chosen.forEach((profile, side) => {
+            if (profile) return;
+            const pool = this.roster.filter((candidate) => !chosen.includes(candidate));
+            chosen[side] = pool[Math.floor(this.rng() * pool.length)];
+        });
+        if (chosen[0].id === chosen[1].id) {
+            const original = chosen[1];
+            chosen[1] = { ...original, name: `${original.name} II`, color: original.accent, accent: original.color };
+        }
+        return chosen;
+    }
+
+    #stepFighters(dt) {
+        const [a, b] = this.fighters;
+        a.faceToward(b.body.x);
+        b.faceToward(a.body.x);
+
+        const controlsOn = this.director.controlsEnabled;
+        this.fighters.forEach((fighter, index) => {
+            const opponent = this.fighters[1 - index];
+            const intent = controlsOn
+                ? this.controllers[index].think(dt, { opponent, arena: this.config.arena })
+                : NEUTRAL_INTENT;
+            fighter.update(dt, intent, this.world);
+        });
+
+        this.#separate(a, b);
+        this.hitResolver.resolve(this.fighters);
+    }
+
+    /** Keeps fighters from overlapping; a cornered fighter stays put and the other is pushed out. */
+    #separate(a, b) {
+        if (a.state === 'ko' || b.state === 'ko') return;
+        if (Math.abs(a.body.y - b.body.y) > 110) return;
+
+        const minGap = this.config.fighter.pushboxHalfWidth * 2;
+        const dx = b.body.x - a.body.x;
+        const overlap = minGap - Math.abs(dx);
+        if (overlap <= 0) return;
+
+        const direction = Math.sign(dx) || (a.side === 0 ? 1 : -1);
+        a.body.x -= (direction * overlap) / 2;
+        b.body.x += (direction * overlap) / 2;
+
+        const { wallMargin, width } = this.config.arena;
+        const lo = wallMargin;
+        const hi = width - wallMargin;
+        const clampX = (fighter) => { fighter.body.x = Math.min(hi, Math.max(lo, fighter.body.x)); };
+        clampX(a);
+        clampX(b);
+
+        if (Math.abs(b.body.x - a.body.x) < minGap) {
+            const aAtWall = a.body.x <= lo || a.body.x >= hi;
+            if (aAtWall) b.body.x = a.body.x + direction * minGap;
+            else a.body.x = b.body.x - direction * minGap;
         }
     }
 
-    handleResize() {
-        if (this.renderer && this.renderer.handleResize) {
-            this.renderer.handleResize();
-        }
-    }
-
-    // Getters for external access
-    getFighters() {
-        return this.fighters;
-    }
-
-    getGameState() {
-        return this.gameState;
-    }
-
-    getPhysicsEngine() {
-        return this.physicsEngine;
+    #subscribe() {
+        const combat = this.config.combat;
+        this.events.on('combat:hit', ({ move, blocked, ko }) => {
+            let duration = move.heavy ? combat.hitstopHeavy : combat.hitstopLight;
+            if (ko || move.meterCost) duration = combat.hitstopSuper;
+            if (blocked) duration *= 0.8;
+            this.hitstop = Math.max(this.hitstop, duration);
+        });
+        this.events.on('fighter:super', () => {
+            this.hitstop = Math.max(this.hitstop, combat.superFreeze);
+        });
     }
 }

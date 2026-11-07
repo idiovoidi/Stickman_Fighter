@@ -1,7 +1,7 @@
 {
   "name": "stick-fighter",
-  "version": "2.0.0",
-  "description": "A modern stick figure fighting game built with Matter.js",
+  "version": "3.0.0",
+  "description": "A self-playing neon stick figure fighting game",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,9 +9,6 @@
     "preview": "vite preview",
     "lint": "eslint src/**/*.js",
     "format": "prettier --write src/**/*.js"
-  },
-  "dependencies": {
-    "matter-js": "^0.19.0"
   },
   "devDependencies": {
     "@vitejs/plugin-basic-ssl": "^1.0.1",

@@ -19,8 +19,5 @@ export default defineConfig({
     alias: {
       '@': '/src'
     }
-  },
-  optimizeDeps: {
-    include: ['matter-js']
   }
 });

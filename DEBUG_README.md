@@ -27,3 +27,12 @@ The project is now configured for debugging with VS Code. Press **F5** or go to 
 - **Watch Expressions**: Monitor specific expressions
 
 The dev server runs on `http://localhost:3000` and includes hot module replacement for faster development.
+
+## In-game debugging
+
+- Press `` ` `` (backquote) during a match to overlay hurtboxes, active strike hitboxes, and each fighter's state and AI plan.
+- In the browser console, `window.stickFighter` exposes `{ engine, loop, settings }`:
+  - `stickFighter.loop.timeScale = 4` fast-forwards the simulation.
+  - `stickFighter.engine.events.on('combat:hit', console.log)` logs every hit.
+  - `stickFighter.engine.fighters[0].vitals.meter = 100` fills a super meter.
+- Runtime errors are logged once per distinct message. If the game loop fails repeatedly, its circuit breaker trips and the "Something broke" overlay appears.

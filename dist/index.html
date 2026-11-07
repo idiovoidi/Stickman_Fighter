@@ -3,189 +3,142 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stick Fighter - Modern Combat</title>
-    <meta name="description" content="A modern stick figure fighting game built with Matter.js physics">
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-            color: white;
-            overflow: hidden;
-            user-select: none;
-        }
-
-        #loading {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.9);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-            transition: opacity 0.5s ease;
-        }
-
-        #loading.hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .spinner {
-            width: 50px;
-            height: 50px;
-            border: 3px solid rgba(255, 255, 255, 0.3);
-            border-top: 3px solid #00d4ff;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        #loading p {
-            font-size: 1.2em;
-            color: #00d4ff;
-        }
-
-        #game-container {
-            width: 100vw;
-            height: 100vh;
-            position: relative;
-            overflow: hidden;
-        }
-
-        #ui-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 100;
-        }
-
-        .game-ui {
-            pointer-events: auto;
-        }
-
-        #health-bars {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            right: 20px;
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .health-bar {
-            background: rgba(0, 0, 0, 0.5);
-            border-radius: 10px;
-            padding: 10px;
-            min-width: 200px;
-        }
-
-        .health-fill {
-            height: 20px;
-            background: linear-gradient(90deg, #ff4444, #ff8844);
-            border-radius: 10px;
-            transition: width 0.3s ease;
-            position: relative;
-        }
-
-        .health-fill.player2 {
-            background: linear-gradient(90deg, #44ff44, #88ff88);
-        }
-
-        .health-text {
-            font-size: 0.9em;
-            margin-top: 5px;
-            text-align: center;
-        }
-
-        #controls {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px;
-            border-radius: 10px;
-            backdrop-filter: blur(10px);
-        }
-
-        #game-title {
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 2em;
-            font-weight: bold;
-            background: linear-gradient(45deg, #00d4ff, #ff6b6b);
-            background-clip: text;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .hidden {
-            display: none !important;
-        }
-
-        @media (max-width: 768px) {
-            #controls {
-                font-size: 0.8em;
-                padding: 10px;
-            }
-
-            #game-title {
-                font-size: 1.5em;
-            }
-        }
-    </style>
-  <script type="module" crossorigin src="/assets/index-beb51893.js"></script>
+    <title>Stick Fighter: The Great</title>
+    <meta name="description" content="A self-playing neon stick figure fighting game. Watch the AI brawl or step in yourself.">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 40'%3E%3Cg fill='none' stroke='%23ff4fd8' stroke-width='3' stroke-linecap='round'%3E%3Ccircle cx='16' cy='7' r='5' fill='%23ff4fd8'/%3E%3Cpath d='M16 12 L16 25 M16 15 L8 21 M16 15 L25 12 M16 25 L10 37 M16 25 L23 37'/%3E%3C/g%3E%3C/svg%3E">
+  <script type="module" crossorigin src="/assets/index-59228348.js"></script>
+  <link rel="stylesheet" href="/assets/index-799199cd.css">
 </head>
 <body>
-    <div id="loading">
-        <div class="spinner"></div>
-        <p>Loading Stick Fighter...</p>
-    </div>
+    <div id="app">
+        <canvas id="stage" aria-label="Fight arena"></canvas>
 
-    <div id="game-container">
-        <div id="ui-overlay">
-            <div id="game-title">Stick Fighter</div>
-            <div id="health-bars" class="hidden">
-                <div class="health-bar">
-                    <div class="health-fill player1" style="width: 100%"></div>
-                    <div class="health-text">Player 1: 100%</div>
+        <header id="hud" class="hud" aria-hidden="true">
+            <div class="hud-side" data-side="0">
+                <div class="hud-identity">
+                    <span class="hud-tag">CPU</span>
+                    <span class="hud-name">—</span>
+                    <span class="hud-title"></span>
                 </div>
-                <div class="health-bar">
-                    <div class="health-fill player2" style="width: 100%"></div>
-                    <div class="health-text">Player 2: 100%</div>
+                <div class="bar health"><div class="bar-ghost"></div><div class="bar-fill"></div></div>
+                <div class="hud-row">
+                    <div class="bar stamina"><div class="bar-fill"></div></div>
+                    <div class="pips"><span class="pip"></span><span class="pip"></span></div>
+                </div>
+                <div class="hud-row">
+                    <div class="bar meter"><div class="bar-fill"></div></div>
+                    <span class="meter-ready">SUPER</span>
                 </div>
             </div>
-            <div id="controls" class="game-ui">
-                <h3>Controls</h3>
-                <p><strong>Player 1:</strong> A/D (Move) W (Jump) Space (Attack)</p>
-                <p><strong>Player 2:</strong> ←/→ (Move) ↑ (Jump) Enter (Attack)</p>
-                <p><strong>General:</strong> R (Reset) P (Pause) D (Debug)</p>
+
+            <div class="hud-center">
+                <div class="hud-timer">60</div>
+                <div class="hud-round">ROUND 1</div>
             </div>
+
+            <div class="hud-side" data-side="1">
+                <div class="hud-identity">
+                    <span class="hud-tag">CPU</span>
+                    <span class="hud-name">—</span>
+                    <span class="hud-title"></span>
+                </div>
+                <div class="bar health"><div class="bar-ghost"></div><div class="bar-fill"></div></div>
+                <div class="hud-row">
+                    <div class="bar stamina"><div class="bar-fill"></div></div>
+                    <div class="pips"><span class="pip"></span><span class="pip"></span></div>
+                </div>
+                <div class="hud-row">
+                    <div class="bar meter"><div class="bar-fill"></div></div>
+                    <span class="meter-ready">SUPER</span>
+                </div>
+            </div>
+        </header>
+
+        <div id="announcer" class="announcer" aria-live="polite">
+            <div class="announce-main"></div>
+            <div class="announce-sub"></div>
         </div>
+
+        <footer id="hint" class="hint"></footer>
+
+        <section id="menu" class="overlay overlay-menu">
+            <div class="menu-card">
+                <h1 class="logo">
+                    <span class="logo-top">STICK FIGHTER</span>
+                    <span class="logo-bottom">THE GREAT</span>
+                </h1>
+                <p class="tagline">Self-playing neon rooftop brawls. Kick back and watch the AI go at it, or step into the ring yourself.</p>
+
+                <div class="menu-field">
+                    <span class="field-label">Mode</span>
+                    <div class="segmented" data-setting="mode">
+                        <button type="button" data-value="auto">Spectate<small>AI vs AI</small></button>
+                        <button type="button" data-value="pvai">Fight<small>You vs AI</small></button>
+                        <button type="button" data-value="pvp">Versus<small>2 players</small></button>
+                    </div>
+                </div>
+
+                <div class="menu-field" data-field="difficulty">
+                    <span class="field-label">AI Skill</span>
+                    <div class="segmented" data-setting="difficulty"></div>
+                </div>
+
+                <div class="menu-field">
+                    <span class="field-label">Fighters</span>
+                    <div class="roster-row"><span class="roster-side">Left</span><div class="roster" data-setting="p1"></div></div>
+                    <div class="roster-row"><span class="roster-side">Right</span><div class="roster" data-setting="p2"></div></div>
+                </div>
+
+                <button type="button" class="btn btn-primary" data-action="start">Start</button>
+
+                <details class="controls-help">
+                    <summary>Controls</summary>
+                    <table>
+                        <thead><tr><th></th><th>Player 1</th><th>Player 2</th></tr></thead>
+                        <tbody>
+                            <tr><td>Move</td><td><kbd>A</kbd> <kbd>D</kbd></td><td><kbd>←</kbd> <kbd>→</kbd></td></tr>
+                            <tr><td>Jump</td><td><kbd>W</kbd></td><td><kbd>↑</kbd></td></tr>
+                            <tr><td>Block</td><td><kbd>S</kbd></td><td><kbd>↓</kbd></td></tr>
+                            <tr><td>Punch (tap to chain)</td><td><kbd>J</kbd></td><td><kbd>,</kbd> / <kbd>Num1</kbd></td></tr>
+                            <tr><td>Kick</td><td><kbd>K</kbd></td><td><kbd>.</kbd> / <kbd>Num2</kbd></td></tr>
+                            <tr><td>Sweep</td><td><kbd>L</kbd></td><td><kbd>/</kbd> / <kbd>Num3</kbd></td></tr>
+                            <tr><td>Super (full meter)</td><td><kbd>U</kbd></td><td><kbd>;</kbd> / <kbd>Num5</kbd></td></tr>
+                            <tr><td>Dash</td><td><kbd>L-Shift</kbd></td><td><kbd>R-Shift</kbd></td></tr>
+                        </tbody>
+                    </table>
+                    <p class="controls-note"><kbd>Esc</kbd> pause · <kbd>M</kbd> mute · <kbd>F</kbd> 2× speed while spectating · <kbd>`</kbd> show hitboxes</p>
+                </details>
+            </div>
+        </section>
+
+        <section id="pause" class="overlay hidden">
+            <div class="menu-card compact">
+                <h2 class="overlay-title">PAUSED</h2>
+                <button type="button" class="btn btn-primary" data-action="resume">Resume</button>
+                <button type="button" class="btn" data-action="restart">Restart Match</button>
+                <button type="button" class="btn" data-action="exit">Main Menu</button>
+            </div>
+        </section>
+
+        <section id="results" class="overlay hidden">
+            <div class="menu-card compact">
+                <p class="results-kicker">MATCH OVER</p>
+                <h2 class="overlay-title results-winner"></h2>
+                <p class="results-score"></p>
+                <button type="button" class="btn btn-primary" data-action="rematch">Rematch</button>
+                <button type="button" class="btn" data-action="exit">Main Menu</button>
+            </div>
+        </section>
+
+        <section id="fatal" class="overlay hidden">
+            <div class="menu-card compact">
+                <h2 class="overlay-title">Something broke</h2>
+                <p class="fatal-message"></p>
+                <button type="button" class="btn btn-primary" onclick="location.reload()">Reload</button>
+            </div>
+        </section>
     </div>
 
-    <!-- Game scripts will be injected by Vite -->
     
 </body>
 </html>

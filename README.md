@@ -1,194 +1,83 @@
-# Stick Fighter - Modern Combat
+# Stick Fighter: The Great
 
-A completely overhauled, modern stick figure fighting game built with cutting-edge web technologies and Matter.js physics.
+A self-playing neon stick-figure fighting game. Sit back and watch two AI fighters brawl on a synthwave rooftop, or step in yourself against the CPU or a friend on the same keyboard.
 
-## 🚀 What's New
+Vanilla JavaScript + Canvas 2D, bundled with Vite. No runtime dependencies.
 
-This is a complete overhaul of the original Stick Fighter game, featuring:
+## Getting started
 
-### ✅ Modern Architecture
-- **ES6+ JavaScript** with modern module system
-- **Vite** build system for lightning-fast development
-- **Clean separation of concerns** with modular systems
-- **Component-based design** for maintainability
-
-### ✅ Enhanced Gameplay
-- **Realistic physics** with Matter.js integration
-- **Sophisticated AI** with personality traits and difficulty levels
-- **Modern input system** with keyboard and touch support
-- **Visual effects** including particles, animations, and screen shake
-
-### ✅ Professional UI/UX
-- **Responsive design** that works on all devices
-- **Modern styling** with gradients and animations
-- **Intuitive controls** with visual feedback
-- **Loading screens** and smooth transitions
-
-## 🎮 Features
-
-### Core Systems
-- **Physics Engine**: Matter.js for realistic stick figure physics
-- **AI System**: Smart opponents with different personalities
-- **Collision Detection**: Precise hit detection and damage calculation
-- **Animation System**: Smooth character animations and effects
-- **UI Management**: Modern interface with health bars and menus
-
-### Game Modes
-- **Single Player**: Fight against AI opponents
-- **Two Player**: Local multiplayer combat
-- **Multiple Difficulty Levels**: Easy, Medium, Hard AI
-
-### Controls
-- **Player 1**: A/D (Move), W (Jump), Space (Attack)
-- **Player 2**: Arrow Keys (Move), ↑ (Jump), Enter (Attack)
-- **Global**: R (Reset), P (Pause), D (Debug), Esc (Menu)
-
-## 🛠️ Technical Stack
-
-- **Frontend**: Vanilla JavaScript (ES6+)
-- **Physics**: Matter.js
-- **Build System**: Vite
-- **Styling**: Modern CSS with gradients and animations
-- **Development**: ESLint, Prettier for code quality
-
-## 🚀 Getting Started
-
-### Prerequisites
-- Node.js 16+ and npm
-- Modern web browser
-
-### Installation
-
-1. **Clone and install dependencies:**
-   ```bash
-   npm install
-   ```
-
-2. **Start development server:**
-   ```bash
-   npm run dev
-   ```
-
-3. **Open your browser:**
-   Navigate to `http://localhost:3003` (or the port shown in terminal)
-
-### Build for Production
 ```bash
-npm run build
+npm install
+npm run dev      # http://localhost:3000
+npm run build    # production bundle in dist/
+npm run preview  # serve the built bundle
 ```
 
-## 🎯 Current Status
+## Modes
 
-✅ **Fully Functional**: Game loads and runs without errors
-✅ **Debug Mode**: Press `D` during gameplay for physics visualization
-✅ **All Systems**: Physics, AI, UI, and collision detection working
-✅ **Modern Architecture**: Clean ES6+ modules with proper imports
-✅ **Production Ready**: Successful builds and optimized bundles
+| Mode | Who fights |
+| --- | --- |
+| Spectate | AI vs AI, matches roll on automatically (also plays behind the main menu) |
+| Fight | You (P1) vs AI |
+| Versus | P1 vs P2 on one keyboard |
 
-## 📁 Project Structure
+Difficulty (Easy / Normal / Hard / Master) sets the AI's reaction time, blocking, accuracy, anti-air and combo skill. Each of the six fighters also has its own stats and personality (aggression, caution, jumpiness, kick preference, combo drive). Pick fighters or leave them on `?` for random.
+
+## Controls
+
+| Action | Player 1 | Player 2 |
+| --- | --- | --- |
+| Move | A / D | ← / → |
+| Jump | W | ↑ |
+| Block | S | ↓ |
+| Punch (jab → cross → uppercut) | J | , or Numpad 1 |
+| Kick (roundhouse; flying kick in the air) | K | . or Numpad 2 |
+| Sweep | L | / or Numpad 3 |
+| Super (full meter) | U | ; or Numpad 5 |
+| Dash (held direction, else backward) | Left Shift | Right Shift or Numpad 0 |
+
+Global: `Esc`/`P` pause, `M` mute, `F` toggle 2× speed (spectate), `` ` `` toggle hitbox overlay.
+
+## Combat
+
+- Moves have frame data (startup / active / recovery), and hits can cancel into follow-ups for combos (damage scales down the longer a combo runs; juggles are capped).
+- Blocking takes chip damage and drains stamina. An empty stamina bar means a guard break.
+- Hitting an opponent during their startup is a **counter hit** for bonus damage.
+- Sweeps, supers and juggle finishers cause knockdowns; a KO turns the loser into a ragdoll.
+- Dealing and taking damage builds super meter. At 100 the **Dragon Fist** is ready.
+- Best of 3 rounds, 60 seconds each. Time over goes to the fighter with more health.
+
+## Project structure
 
 ```
 src/
-├── core/           # Core game systems
-│   ├── GameEngine.js     # Main game coordinator
-│   ├── GameState.js      # State management
-│   └── InputManager.js   # Input handling
-├── entities/       # Game objects
-│   └── Fighter.js        # Fighter character class
-├── systems/        # Specialized systems
-│   ├── Renderer.js       # Graphics rendering
-│   ├── UIManager.js      # UI management
-│   └── CollisionManager.js # Collision detection
-├── ai/            # AI system
-│   └── AIController.js   # AI behavior
-└── main.js        # Application entry point
+├── main.js                 # composition root: builds and wires every system
+├── errors/GameErrors.js    # custom exception hierarchy
+├── utils/                  # decorators (error boundaries, circuit breaker, validation), math, color, EventBus, settings
+├── config/                 # game tuning, difficulty presets, fighter roster, key bindings
+├── core/                   # GameEngine, GameLoop (fixed step), MatchDirector (rounds), InputManager
+├── entities/               # Fighter + components (FighterBody, Vitals, Ragdoll), createFighter factory
+├── animation/              # Skeleton (forward kinematics), poses, Animator
+├── combat/                 # move frame data, HitResolver
+├── controllers/            # HumanController, AIController, createControllers
+├── systems/                # FeedbackDirector (maps game events to particles, shake, sound)
+├── render/                 # Renderer, Camera, backdrop/stage/fighter painters, effects
+├── audio/SoundFX.js        # synthesized WebAudio effects
+└── ui/                     # HUD, Announcer, HintBar, MenuController
 ```
 
-## 🎯 Game Mechanics
+### Design notes
 
-### Fighter System
-- **Modular body parts** with realistic physics constraints
-- **Health and stamina** management
-- **Attack moves**: Punch, Kick, Jump, Block
-- **Knockback and damage** system
+- **Composition over inheritance.** A `Fighter` is assembled from a `FighterBody`, `Vitals`, `Animator`, `Scarf` and so on. Controllers only produce *intents* (`{ move, jump, block, attack, dash }`), so human and AI players drive fighters the same way.
+- **Dependency injection.** `main.js` builds every collaborator and passes it in. `GameEngine` never imports concrete renderers, audio or UI.
+- **Event-driven feedback.** Gameplay emits events (`combat:hit`, `fighter:ko`, `round:over`, …). The FeedbackDirector, Announcer and SoundFX react to them without gameplay knowing they exist.
+- **Error handling.** `utils/decorators.js` provides `withErrorBoundary`, `withCircuitBreaker` and `withValidation` (plus method-decorator factories). These wrap the game loop, event listeners, audio, HUD and factories. Errors come from a hierarchy in `errors/GameErrors.js` (`ConfigurationError`, `InitializationError`, `StateError`, `RuntimeLoopError`, `AudioError`, …).
 
-### AI Behavior
-- **State-based decision making**
-- **Personality traits** (Aggressive, Defensive, Balanced)
-- **Distance-based combat** strategies
-- **Adaptive difficulty** levels
+### Tweaking
 
-### Physics Integration
-- **Realistic collisions** and momentum
-- **Ground detection** and landing impact
-- **Force application** for attacks and movement
-- **Constraint-based** joint system
+- Balance, physics, timers and the camera live in `src/config/gameConfig.js`.
+- Add a fighter by appending a profile to `src/config/fighterRoster.js`.
+- Add or tune moves in `src/combat/moves.js` (frame data plus windup/strike poses).
+- AI difficulty presets live in `src/config/difficulty.js`.
 
-## 🔧 Configuration
-
-The game can be easily configured through the `config` objects in each system:
-
-- **GameEngine**: World bounds, gravity, fighter positions
-- **AIController**: Difficulty levels, behavior parameters
-- **CollisionManager**: Damage multipliers, hit detection
-- **Renderer**: Visual settings, debug options
-
-## 🎨 Customization
-
-### Adding New Fighters
-1. Create new Fighter instance in `GameEngine.createFighters()`
-2. Configure colors, controls, and starting positions
-3. Add AI controller if needed
-
-### Modifying AI Behavior
-1. Adjust personality traits in `AIController.generatePersonality()`
-2. Modify decision parameters in `getDifficultyParams()`
-3. Add new states in the state machine
-
-### Custom Visual Effects
-1. Add effects in `Renderer.renderEffects()`
-2. Modify particle systems in collision manager
-3. Customize UI in `UIManager`
-
-## 🐛 Development
-
-### Debug Mode
-Press `D` during gameplay to toggle debug visualization:
-- Physics bodies and constraints
-- Collision detection areas
-- Performance metrics
-- Game state information
-
-### Code Quality
-- ESLint for code linting
-- Prettier for code formatting
-- Modern JavaScript best practices
-- Comprehensive error handling
-
-## 📱 Mobile Support
-
-The game includes touch-friendly controls:
-- Virtual buttons for mobile devices
-- Responsive UI that adapts to screen size
-- Touch-optimized input handling
-
-## 🔮 Future Enhancements
-
-- Sound effects and background music
-- Character customization and skins
-- Online multiplayer support
-- Tournament mode and rankings
-- Advanced combo system
-- Power-ups and special abilities
-
-## 📄 License
-
-This project is open source and available under the MIT License.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit issues, suggestions, or pull requests.
-
----
-
-**Built with ❤️ using modern web technologies**
+In dev, `window.stickFighter` exposes `{ engine, loop, settings }` for poking at a live match (e.g. `stickFighter.loop.timeScale = 4`).
