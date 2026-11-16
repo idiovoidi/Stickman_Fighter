@@ -4,6 +4,16 @@ A self-playing neon stick-figure fighting game. Sit back and watch two AI fighte
 
 Vanilla JavaScript + Canvas 2D, bundled with Vite. No runtime dependencies.
 
+[![Gameplay preview](docs/preview.gif)](docs/gameplay.webm)
+
+*Click the preview for the full gameplay clip ([gameplay.webm](docs/gameplay.webm)).*
+
+| Menu | Spectate |
+| --- | --- |
+| ![Main menu](docs/menu.png) | ![AI vs AI](docs/spectate.png) |
+| **Fight (you vs AI)** | **Fight (late round)** |
+| ![Player vs AI](docs/fight.png) | ![Fight in progress](docs/fight-2.png) |
+
 ## Getting started
 
 ```bash
